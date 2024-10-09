@@ -1,0 +1,62 @@
+---
+title: "Check Precinct Randomization Balance"
+author: "Andy Zack"
+format: html
+editor: visual
+self-contained: true
+---
+
+```{r setup}
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(here)
+library(estimatr)
+library(kableExtra)
+
+main_randomized <- read_csv(here("main_randomized_precincts.csv"))
+main_raw <- read_csv(here("bq-results-20241001-165358-1727801739528.csv"))
+nm_raw <- read_csv(here("NM_Precinct_Data - NM_Precinct_Data.csv"))
+
+main_df <- main_randomized %>%
+  left_join(bind_rows(main_raw, nm_raw))
+```
+
+```{r}
+balance_covars = c("reg_voters_count",
+                    "pct_female",
+                    "avg_tsmart_urbanicity",
+                    "avg_tsmart_ideology_score",
+                    "avg_tsmart_presidential_general_turnout_score",
+                    "pct_reg_white",
+                    "pct_reg_black",
+                    "pct_reg_latinx",
+                    "avg_tsmart_college_graduate_score",
+                    "vf_reg_under_40",
+                    "vf_reg_over_65",
+                    "ts_partisan_under_15",
+                    "ts_partisan_over_15",
+                    "d_two_way_vote_share_pres_16",
+                    "d_two_way_vote_share_cong_18",
+                    "d_two_way_vote_share_pres_20",
+                    "d_two_way_vote_share_cong_22")
+
+full_model <- main_df %>%
+  glm(paste("treatment ~", paste(balance_covars, collapse = " + ")), data = .)
+ 
+broom::tidy(full_model) %>%
+  kable()
+
+null_model <- main_df %>%
+  glm(treatment ~ 1, data = .)
+
+anova(full_model, null_model)
+
+robust_model <- lm_robust(formula(paste("treatment ~", paste(balance_covars, collapse = " + "))),
+          data = main_df,
+          clusters = randomization_block,
+          se_type = "CR2")
+
+broom::tidy(robust_model) %>% kable()
+```
